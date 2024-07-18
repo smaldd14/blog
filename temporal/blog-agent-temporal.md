@@ -96,6 +96,8 @@ public class BlogPostWorkflowImpl implements BlogPostWorkflow {
 }
 ```
 
+It is worth noting that I set the heartbeat timeout to 600 seconds. Normally you would not do this in a production environment, but for the sake of brevity, I set it to 600 seconds.
+
 And then, the `BlogPostActivities` class handles the implementation of each activity:
 ```java
 @Component
@@ -154,4 +156,7 @@ public class BlogController {
 }
 ```
 
+Finally, I got this all running, used POSTman to hit the `/blog` endpoint, and saw the workflow do its thing! Here's a video of the workflow in action:
+
+<video src="/assets/blog-agent-temporal.mp4" controls></video>
 
