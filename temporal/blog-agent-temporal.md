@@ -1,50 +1,54 @@
-# Creating an AI powered blog agent using TemporalIO
+# Creating an AI-powered Blog Agent using TemporalIO
 
 ## Introduction
-I've been messing around with TemporalIO for awhile now, creating many different 
-workflows to automate tasks that I don't really want to be doing. Temporal is great for 
-developers who like to see the workflow steps right from the code, create workflows
-that are fault tolerant, handle retries, and mainly worry about the "happy path".
-You can read more about Temporal [here](https://docs.temporal.io/docs/overview/what-is-temporal).
 
-## Goal
-The goal of this initial blog agent setup was to create a simple workflow that would have
-the following activities (steps for those not familiar with Temporal lingo):
-1. generate a blog outline given a list of keywords
-2. generate a blog post given the outline, and keywords list
-3. save the blog post to a database
+As a developer passionate about automation, I've been exploring TemporalIO to create workflows that streamline various tasks. Temporal is an excellent tool for developers who appreciate visualizing workflow steps directly in their code, building fault-tolerant processes, and focusing on the "happy path" while handling retries effortlessly. If you're unfamiliar with Temporal, you can learn more about its capabilities in their [official documentation](https://docs.temporal.io/docs/overview/what-is-temporal).
 
-This was a simple enough workflow to get setup, but I plan to add more activities as I build this out.
-Steps such as *sanitizing LLM response, keyword competition research, posting the blog to a website, and indexing
-the posted page* are a few of the next steps I am planning on taking.
+## Project Goal
+
+My primary objective was to develop a straightforward workflow that encompasses the following activities (or steps, for those new to Temporal terminology):
+
+1. Generate a blog outline based on a list of keywords
+2. Create a blog post using the outline and keyword list
+3. Save the blog post to a local file
+4. Store the blog post in a database
+
+While this initial setup is relatively simple, I have plans to expand the workflow with additional activities. Future enhancements may include:
+
+- Sanitizing LLM responses
+- Conducting keyword competition research
+- Automatically posting the blog to a website
+- Indexing the published page
+
+For those eager to see the end result, here's a video demonstration of the workflow in action:
+
+<video src="../assets/blog-agent-temporal.mp4" controls></video>
+
+If you're interested in learning more about the implementation process, continue reading!
 
 ## Setting up Dependencies
-I started off by going over to [Spring Initializr](https://start.spring.io/) and
-creating a new Spring Boot project with postgresql and web capabilities.
 
-Once I downloaded the new project, next I had to install the following dependencies:
-* [Spring AI's](https://docs.spring.io/spring-ai/reference/getting-started.html#repositories)
-documentation to bring in the necessary repositories, and bill of materials (BOM). 
-* Latest temporal java-sdk version (can be found [here](https://central.sonatype.com/artifact/io.temporal/temporal-sdk?smo=true)).
-* [Anthropic Spring boot starter](https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html#_auto_configuration)
-* [OpenAI Spring boot starter](https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_auto_configuration)
+To begin, I used [Spring Initializr](https://start.spring.io/) to create a new Spring Boot project with PostgreSQL and web capabilities. After downloading the project, I installed the following essential dependencies:
 
-Ideally, I would like to use Anthropic's API to generate the blog post and outline because I 
-have found that I get better results. But as of the time of my writing, there was a 
-default cap on the max-token output that the API would give back (4096). I filed an [issue](https://github.com/spring-projects/spring-ai/issues/1068)
-and hopefully that will be fixed soon.
+1. [Spring AI](https://docs.spring.io/spring-ai/reference/getting-started.html#repositories) repositories and bill of materials (BOM)
+2. The latest [Temporal Java SDK](https://central.sonatype.com/artifact/io.temporal/temporal-sdk?smo=true)
+3. [Anthropic Spring Boot starter](https://docs.spring.io/spring-ai/reference/api/chat/anthropic-chat.html#_auto_configuration)
+4. [OpenAI Spring Boot starter](https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html#_auto_configuration)
 
-So, needless to say, I went ahead with the trusty OpenAI GPT-4o model to generate the outline and post.
+Initially, I planned to use Anthropic's API for generating blog posts and outlines due to its superior results. However, at the time of writing, there was a default cap on the max-token output (4096) from the API. I've filed an [issue](https://github.com/spring-projects/spring-ai/issues/1068) to address this limitation, which will hopefully be resolved soon.
 
-## Setting up the Workflow
-Once I had all of my dependencies installed, I began setting up the Temporal classes to 
-run a workflow.
+Given this constraint, I opted to use the reliable OpenAI GPT-4 model for generating outlines and posts.
 
-**Before we do dive in, it is worth mentioning that in order to run Temporal, you need to connect
-to a Temporal server. You can run a local Temporal server, by following [these directions](https://github.com/temporalio/temporal?tab=readme-ov-file#download-and-start-temporal-server-locally)**
+## Implementing the Workflow
 
-The first class I setup was `BlogPostStarter`. This class handles starting the Temporal workflow.
-It was quite simple, and looked like this:
+With the dependencies in place, I began setting up the Temporal classes to run the workflow.
+
+**Note: To run Temporal, you need to connect to a Temporal server. You can set up a local Temporal server by following the [instructions in their GitHub repository](https://github.com/temporalio/temporal?tab=readme-ov-file#download-and-start-temporal-server-locally).**
+
+### BlogPostStarter Class
+
+The `BlogPostStarter` class is responsible for initiating the Temporal workflow:
+
 ```java
 @Component
 public class BlogPostStarterImpl implements BlogPostStarter {
@@ -66,9 +70,10 @@ public class BlogPostStarterImpl implements BlogPostStarter {
 }
 ```
 
-Next, the `BlogPostWorkflow` class handles the orchestrating of activities. This is where 
-Temporal's "workflow as code" mantra comes about. Developers can easily understand the
-order of activities and what is running when.
+### BlogPostWorkflow Class
+
+The `BlogPostWorkflow` class orchestrates the activities, exemplifying Temporal's "workflow as code" philosophy:
+
 ```java
 @WorkflowImpl(taskQueues = BlogPostWorkflowImpl.TASK_QUEUE)
 public class BlogPostWorkflowImpl implements BlogPostWorkflow {
@@ -88,43 +93,72 @@ public class BlogPostWorkflowImpl implements BlogPostWorkflow {
     @Override
     public boolean runWorkflow(List<String> keywords) {
         String result = activities.generateOutline(keywords);
-        GenArticleLlmResponse genArticleLlmResponse = activities.writePost(
-                new OutlineKeywordPair(keywords, result));
+        GenArticleLlmResponse genArticleLlmResponse = activities.writePost(new OutlineKeywordPair(keywords, result));
+        activities.writePostToFile(genArticleLlmResponse);
 //      TODO: activities.sanitizeLlmResponse(genArticleLlmResponse);
         return activities.uploadToDb(genArticleLlmResponse);
     }
 }
 ```
 
-It is worth noting that I set the heartbeat timeout to 600 seconds. Normally you would not do this in a production environment, but for the sake of brevity, I set it to 600 seconds.
+Note: The heartbeat timeout is set to 600 seconds for demonstration purposes. In a production environment, you would typically use a shorter timeout and implement a heartbeater.
 
-And then, the `BlogPostActivities` class handles the implementation of each activity:
+### BlogPostActivities Class
+
+The `BlogPostActivities` class implements each activity:
+
 ```java
 @Component
 @ActivityImpl(taskQueues = BlogPostWorkflowImpl.TASK_QUEUE)
 public class BlogPostActivitiesImpl implements BlogPostActivities {
-    private final AnthropicApiMgr anthropicApiMgr;
+   private final LlmApiMgr llmApiMgr;
     private final BlogPostMgr blogPostMgr;
 
-    public BlogPostActivitiesImpl(AnthropicApiMgr anthropicApiMgr, BlogPostMgr blogPostMgr) {
-        this.anthropicApiMgr = anthropicApiMgr;
+    public BlogPostActivitiesImpl(LlmApiMgr anthropicApiMgr, BlogPostMgr blogPostMgr) {
+        this.llmApiMgr = anthropicApiMgr;
         this.blogPostMgr = blogPostMgr;
     }
-
     @Override
     public String generateOutline(List<String> keywords) {
-        return anthropicApiMgr.generateOutline(keywords);
+        return llmApiMgr.generateOutline(keywords);
     }
 
     @Override
     public GenArticleLlmResponse writePost(OutlineKeywordPair outlineKeywordPair) {
-        GenArticleLlmResponse genArticleLlmResponse = anthropicApiMgr.writePost(outlineKeywordPair);
+        GenArticleLlmResponse genArticleLlmResponse = llmApiMgr.writePost(outlineKeywordPair);
         return genArticleLlmResponse;
     }
 
     @Override
     public BlogPost sanitizeLlmResponse(GenArticleLlmResponse genArticleLlmResponse) {
         return null;
+    }
+
+    @Override
+    public void writePostToFile(GenArticleLlmResponse genArticleLlmResponse) {
+        saveBlogPost(genArticleLlmResponse.slug(), genArticleLlmResponse.post());
+    }
+
+    public static void saveBlogPost(String urlSlug, String blogPostContent) {
+        String filename = urlSlug + ".md";
+        Path filePath = Paths.get(filename);
+
+        try {
+            // Create the file if it doesn't exist
+            if (!Files.exists(filePath)) {
+                Files.createFile(filePath);
+            }
+
+            // Write the content to the file
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath.toFile()))) {
+                writer.write(blogPostContent);
+            }
+
+            System.out.println("Blog post saved successfully to: " + filePath.toAbsolutePath());
+        } catch (IOException e) {
+            System.err.println("Error saving blog post: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -138,7 +172,43 @@ public class BlogPostActivitiesImpl implements BlogPostActivities {
 }
 ```
 
-Lastly, I created a quick @RestController called `BlogController` to start the workflow:
+## Interacting with the LLM
+
+The `LlmApiMgr` class manages interactions with either GPT-4 or Anthropic's Claude-3.5-Sonnet model. It uses Spring AI's `ChatModel`s and Java's `ResourceLoader`, `Resource`, and `StringTemplate` files for efficient LLM model calls:
+
+```java
+public class LlmApiMgrImpl implements LlmApiMgr {
+    private final AnthropicChatModel anthropicChatModel;
+    private final OpenAiChatModel openAiChatModel;
+    private final Resource generateOutlineResource;
+    private final Resource generateArticleResource;
+
+    public LlmApiMgrImpl(AnthropicChatModel anthropicChatModel,
+                         OpenAiChatModel openAiChatModel,
+                         ResourceLoader resourceLoader) {
+        this.anthropicChatModel = anthropicChatModel;
+        this.openAiChatModel = openAiChatModel;
+        generateOutlineResource = resourceLoader.getResource("classpath:/prompts/generate-outline.st");
+        generateArticleResource = resourceLoader.getResource("classpath:/prompts/generate-article.st");
+    }
+
+    @Override
+    public String generateOutline(List<String> keywords) {
+        PromptTemplate promptTemplate = new PromptTemplate(generateOutlineResource);
+        Prompt prompt = promptTemplate.create(Map.of("KEYWORDS", keywords,
+                                                     "TARGET_KEYWORD", keywords.getFirst()));
+//        Generation generation = anthropicChatModel.call(prompt).getResult();
+        Generation generation = openAiChatModel.call(prompt).getResult();
+        String description = generation.getOutput().getContent();
+        return description;
+    }
+}
+```
+
+## Starting the Workflow
+
+To initiate the workflow, I created a simple `@RestController` called `BlogController`:
+
 ```java
 @RestController
 public class BlogController {
@@ -152,11 +222,20 @@ public class BlogController {
     public void startBlogPostWorkflow() {
         blogPostStarter.startBlogPostWorkflow(List.of("Google ads for apartments"));
     }
-
 }
 ```
 
-Finally, I got this all running, used POSTman to hit the `/blog` endpoint, and saw the workflow do its thing! Here's a video of the workflow in action:
+For the sake of this tutorial, I hardcoded the keyword list. In a production environment, you would likely pass the keywords as a request parameter, or in the request body for a POST call.
 
-<video src="/assets/blog-agent-temporal.mp4" controls></video>
+## Conclusion
 
+In this project, we leveraged Temporal to create a robust workflow that:
+
+1. Generates an SEO-optimized outline
+2. Uses the outline to create an SEO-optimized blog post
+3. Saves the blog post locally in markdown format
+4. Uploads the blog post and SEO metadata to a database for future use
+
+This automation streamlines the content creation process, ensuring consistency and efficiency in blog post generation. You can see the workflow in action by referring to the video at the beginning of this post.
+
+If you're interested in exploring the full codebase or discussing this project further, feel free to reach out to me on [Twitter](https://twitter.com/devinsmaldore) or [LinkedIn](https://www.linkedin.com/in/devinsmaldore). I'm always excited to connect with fellow developers and discuss innovative ways to leverage AI and automation in our projects, especially when it comes to Temporal!
